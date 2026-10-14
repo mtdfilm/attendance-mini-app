@@ -241,6 +241,29 @@ function App() {
   }, [search, kind, attention, sort, direction]);
   useEffect(() => {
     const tg = window.Telegram?.WebApp;
+    if (!tg) return;
+    tg.ready();
+    tg.expand();
+    if (
+      tg.initData &&
+      tg.isVersionAtLeast?.("8.0") &&
+      tg.requestFullscreen &&
+      !tg.isFullscreen
+    ) {
+      const fallback = () => {
+        if (!tg.isFullscreen) tg.expand();
+      };
+      tg.onEvent("fullscreenFailed", fallback);
+      try {
+        tg.requestFullscreen();
+      } catch {
+        fallback();
+      }
+      return () => tg.offEvent("fullscreenFailed", fallback);
+    }
+  }, []);
+  useEffect(() => {
+    const tg = window.Telegram?.WebApp;
     const update = () => {
       document.documentElement.dataset.theme =
         theme === "auto"
@@ -266,8 +289,6 @@ function App() {
     };
     localStorage.setItem("attendance.theme", theme);
     update();
-    tg?.ready();
-    tg?.expand();
     const media = matchMedia("(prefers-color-scheme: dark)");
     media.addEventListener("change", update);
     for (const ev of [
@@ -275,6 +296,7 @@ function App() {
       "viewportChanged",
       "safeAreaChanged",
       "contentSafeAreaChanged",
+      "fullscreenChanged",
     ])
       tg?.onEvent(ev, update);
     return () => {
@@ -284,6 +306,7 @@ function App() {
         "viewportChanged",
         "safeAreaChanged",
         "contentSafeAreaChanged",
+        "fullscreenChanged",
       ])
         tg?.offEvent(ev, update);
     };

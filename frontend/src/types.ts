@@ -123,6 +123,9 @@ type Telegram = {
   contentSafeAreaInset?: { top: number; bottom: number };
   ready: () => void;
   expand: () => void;
+  isVersionAtLeast?: (version: string) => boolean;
+  requestFullscreen?: () => void;
+  isFullscreen?: boolean;
   onEvent: (e: string, f: () => void) => void;
   offEvent: (e: string, f: () => void) => void;
   BackButton: {
