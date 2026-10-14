@@ -1,0 +1,29 @@
+services:
+  app:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      APP_ENV: production
+      DEV_AUTH_BYPASS: "false"
+      DATABASE_URL: sqlite:////data/attendance.db
+    ports:
+      - "127.0.0.1:8000:8000"
+    volumes:
+      - attendance-data:/data
+    security_opt:
+      - no-new-privileges:true
+  bot:
+    build: .
+    profiles: [telegram]
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      APP_ENV: production
+      DEV_AUTH_BYPASS: "false"
+      DATABASE_URL: sqlite:////data/attendance.db
+    command: ["python", "-m", "app.bot"]
+    security_opt:
+      - no-new-privileges:true
+volumes:
+  attendance-data:

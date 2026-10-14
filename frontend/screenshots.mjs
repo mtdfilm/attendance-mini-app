@@ -1,0 +1,55 @@
+import {chromium,expect} from '@playwright/test';
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import {fileURLToPath,pathToFileURL} from 'node:url';
+import assert from 'node:assert/strict';
+
+const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..');
+const output=path.join(root,'docs/assets');
+const base=process.env.SCREENSHOT_URL||'http://127.0.0.1:8003';
+await fs.mkdir(output,{recursive:true});
+const browser=await chromium.launch({channel:'chrome',headless:true});
+try{
+  const context=await browser.newContext({viewport:{width:1440,height:1000},colorScheme:'light'});
+  const auth=await context.request.post(base+'/api/auth',{data:{}});
+  assert(auth.ok(),'Screenshots require an explicit local demo server');
+  const token=(await auth.json()).token;
+  const data=await (await context.request.get(base+'/api/summary',{headers:{Authorization:`Bearer ${token}`}})).json();
+  assert(data.dev_bypass&&data.semesters.every(s=>s.name.startsWith('QA ·')||s.name.startsWith('ДЕМО')),'Refusing to capture personal production data');
+  const page=await context.newPage();await page.goto(base);
+  await page.getByRole('heading',{name:'Посещения и пропуски'}).waitFor();
+  await page.locator('.counters').evaluate(el=>el.scrollIntoView({block:'start',behavior:'instant'}));
+  await page.screenshot({path:path.join(output,'overview-light.png')});
+  await page.getByRole('button',{name:'Настройки',exact:true}).click();
+  await page.getByRole('button',{name:'Тёмная',exact:true}).click();
+  await page.getByRole('button',{name:'Обзор',exact:true}).click();
+  await page.locator('.counters').evaluate(el=>el.scrollIntoView({block:'start',behavior:'instant'}));
+  await page.screenshot({path:path.join(output,'overview-dark.png')});
+  await page.getByRole('button',{name:'Настройки',exact:true}).click();
+  await page.getByRole('button',{name:'Светлая',exact:true}).click();
+  await page.setViewportSize({width:390,height:844});
+  await page.getByRole('button',{name:'Сегодня',exact:true}).last().click();
+  await page.getByRole('button',{name:'Календарь',exact:true}).click();
+  const counts=new Map();
+  const key=s=>new Intl.DateTimeFormat('en-CA',{timeZone:'Europe/Warsaw',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date(s));
+  for(const c of data.components)for(const s of c.sessions)if(s.finished){const d=key(s.start);counts.set(d,(counts.get(d)||0)+1);}
+  const target=[...counts].filter(([d])=>d.slice(0,7)===data.today_date.slice(0,7)).sort((a,b)=>b[1]-a[1]||b[0].localeCompare(a[0]))[0][0];
+  const label=new Intl.DateTimeFormat('ru-RU',{timeZone:'Europe/Warsaw',day:'numeric',month:'long',year:'numeric'}).format(new Date(target+'T12:00:00Z'));
+  await page.getByRole('button',{name:new RegExp('^'+label.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'))}).click();
+  await page.getByRole('button',{name:'К месяцу',exact:true}).click();
+  await page.locator('.month-calendar').evaluate(el=>el.scrollIntoView({block:'start',behavior:'instant'}));
+  await page.screenshot({path:path.join(output,'calendar-mobile.png')});
+  await page.getByRole('button',{name:'Обзор',exact:true}).click();
+  await page.locator('.counters button').first().click();
+  await page.locator('.agenda-heading').evaluate(el=>el.scrollIntoView({block:'start',behavior:'instant'}));
+  await page.screenshot({path:path.join(output,'backlog-mobile.png')});
+  await page.getByRole('button',{name:'Обзор',exact:true}).click();
+  await page.locator('.subject-button').filter({hasText:'Java Programming'}).first().click();
+  await page.locator('.lesson-heading').evaluate(el=>el.scrollIntoView({block:'start',behavior:'instant'}));
+  await page.screenshot({path:path.join(output,'course-mobile.png')});
+  await page.setViewportSize({width:1920,height:1080});
+  await page.goto(pathToFileURL(path.join(root,'docs/showcase.html')).href);
+  await page.locator('img').evaluateAll(async images=>{await Promise.all(images.map(i=>i.decode()));});
+  await page.screenshot({path:path.join(output,'hero.png')});
+  console.log('Real UI screenshots and portfolio hero generated from verified synthetic demo data only.');
+}finally{await browser.close()}
